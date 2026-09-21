@@ -100,7 +100,7 @@ export async function initializeCoreTables() {
     "create events table",
     `
       CREATE TABLE IF NOT EXISTS events (
-        site_id UInt16,
+        site_id UInt32,
         timestamp DateTime,
         timestamp_ms DateTime64(3) DEFAULT toDateTime64(timestamp, 3),
         session_id String,
@@ -158,7 +158,7 @@ export async function initializeCoreTables() {
     "create bot events table",
     `
       CREATE TABLE IF NOT EXISTS bot_events (
-        site_id UInt16,
+        site_id UInt32,
         timestamp DateTime,
         session_id String,
         user_id String,
@@ -214,7 +214,7 @@ export async function initializeCoreTables() {
     "create bot observations table",
     `
       CREATE TABLE IF NOT EXISTS bot_observations (
-        site_id UInt16,
+        site_id UInt32,
         timestamp DateTime,
         session_id String,
         user_id String,
@@ -266,7 +266,7 @@ export async function initializeCoreTables() {
     "create session replay events table",
     `
       CREATE TABLE IF NOT EXISTS session_replay_events (
-        site_id UInt16,
+        site_id UInt32,
         session_id String,
         user_id String,
         timestamp DateTime64(3),
@@ -301,7 +301,7 @@ export async function initializeCoreTables() {
     "create session replay metadata table",
     `
       CREATE TABLE IF NOT EXISTS session_replay_metadata (
-        site_id UInt16,
+        site_id UInt32,
         session_id String,
         user_id String,
         start_time DateTime,
@@ -362,7 +362,7 @@ export async function initializeCoreTables() {
     "create session replay metadata v2 table",
     `
       CREATE TABLE IF NOT EXISTS session_replay_metadata_v2 (
-        site_id UInt16,
+        site_id UInt32,
         session_id String,
         user_id SimpleAggregateFunction(anyLast, String),
         -- Rows arrive with '' until the visitor identifies, and max() over a

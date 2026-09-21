@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   getSubscriptionInner: vi.fn(),
   invalidate: vi.fn(),
   clickhouseCommand: vi.fn(async () => undefined),
+  // Deletion now clears every table carrying site_id, and asks ClickHouse which
+  // those are, so the mock has to answer that question too.
+  clickhouseQuery: vi.fn(async () => ({
+    json: async () => [{ table: "events" }, { table: "session_replay_events" }],
+  })),
   detectPlatform: vi.fn(async () => null),
 }));
 vi.mock("../../db/postgres/postgres.js", async () => {
@@ -15,7 +20,9 @@ vi.mock("../../db/postgres/postgres.js", async () => {
   const client = new PGlite();
   return { db: drizzle(client, { schema }), sql: client };
 });
-vi.mock("../../db/clickhouse/clickhouse.js", () => ({ clickhouse: { command: mocks.clickhouseCommand } }));
+vi.mock("../../db/clickhouse/clickhouse.js", () => ({
+  clickhouse: { command: mocks.clickhouseCommand, query: mocks.clickhouseQuery },
+}));
 vi.mock("../../lib/siteConfig.js", () => ({ siteConfig: { invalidate: mocks.invalidate } }));
 vi.mock("../../api/stripe/getSubscription.js", () => ({ getSubscriptionInner: mocks.getSubscriptionInner }));
 vi.mock("../lifecycleEmails/platformDetect.js", () => ({ detectPlatform: mocks.detectPlatform }));
@@ -209,7 +216,7 @@ describe("cleanup", () => {
     expect(await readSite(site.siteId)).toBeDefined();
     expect(mocks.clickhouseCommand).not.toHaveBeenCalled();
   });
-  it("keeps the row for retry if replay cleanup fails", async () => {
+  it("keeps the row for retry if event cleanup fails", async () => {
     const site = await unclaimed();
     await db.update(sites).set({ claimExpiresAt: "2000-01-01T00:00:00Z" }).where(eq(sites.siteId, site.siteId));
     mocks.clickhouseCommand.mockRejectedValueOnce(new Error("ClickHouse unavailable"));

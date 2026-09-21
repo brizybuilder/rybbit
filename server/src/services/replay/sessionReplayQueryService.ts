@@ -65,7 +65,7 @@ export class SessionReplayQueryService {
 
     const filterStatement = getFilterStatement(options.filters || "");
 
-    let whereConditions = [`site_id = {siteId:UInt16}`];
+    let whereConditions = [`site_id = {siteId:UInt32}`];
     const queryParams: any = { siteId, limit, offset };
 
     if (userId) {
@@ -85,7 +85,7 @@ export class SessionReplayQueryService {
     let sessionIdsSubquery = `
       SELECT DISTINCT session_id
       FROM session_replay_events
-      WHERE site_id = {siteId:UInt16} AND event_type = '2'
+      WHERE site_id = {siteId:UInt32} AND event_type = '2'
     `;
 
     // If filters are present, we need to further filter by sessions that match the filter criteria
@@ -94,16 +94,16 @@ export class SessionReplayQueryService {
         SELECT DISTINCT srm.session_id
         FROM session_replay_metadata_v2 srm
         FINAL
-        WHERE srm.site_id = {siteId:UInt16}
+        WHERE srm.site_id = {siteId:UInt32}
           AND srm.session_id IN (
             SELECT DISTINCT session_id
             FROM session_replay_events
-            WHERE site_id = {siteId:UInt16} AND event_type = '2'
+            WHERE site_id = {siteId:UInt32} AND event_type = '2'
           )
           AND srm.session_id IN (
             SELECT DISTINCT session_id
             FROM events
-            WHERE site_id = {siteId:UInt16}
+            WHERE site_id = {siteId:UInt32}
               ${filterStatement}
           )
       `;
@@ -160,7 +160,7 @@ export class SessionReplayQueryService {
         SELECT ${METADATA_COLUMNS}
         FROM session_replay_metadata_v2
         FINAL
-        WHERE site_id = {siteId:UInt16}
+        WHERE site_id = {siteId:UInt32}
           AND session_id = {sessionId:String}
         LIMIT 1
       `,
@@ -185,7 +185,7 @@ export class SessionReplayQueryService {
           event_data_key,
           batch_index
         FROM session_replay_events
-        WHERE site_id = {siteId:UInt16} 
+        WHERE site_id = {siteId:UInt32} 
           AND session_id = {sessionId:String}
         ORDER BY timestamp ASC, sequence_number ASC
       `,
@@ -290,7 +290,7 @@ export class SessionReplayQueryService {
         SELECT ${METADATA_COLUMNS}
         FROM session_replay_metadata_v2
         FINAL
-        WHERE site_id = {siteId:UInt16}
+        WHERE site_id = {siteId:UInt32}
           AND session_id = {sessionId:String}
         LIMIT 1
       `,
@@ -317,7 +317,7 @@ export class SessionReplayQueryService {
           query: `
             SELECT DISTINCT event_data_key
             FROM session_replay_events
-            WHERE site_id = {siteId:UInt16}
+            WHERE site_id = {siteId:UInt32}
               AND session_id = {sessionId:String}
               AND event_data_key IS NOT NULL
           `,
@@ -339,7 +339,7 @@ export class SessionReplayQueryService {
     await clickhouse.command({
       query: `
         DELETE FROM session_replay_events
-        WHERE site_id = {siteId:UInt16}
+        WHERE site_id = {siteId:UInt32}
           AND session_id = {sessionId:String}
       `,
       query_params: { siteId, sessionId },
@@ -348,7 +348,7 @@ export class SessionReplayQueryService {
     await clickhouse.command({
       query: `
         DELETE FROM session_replay_metadata_v2
-        WHERE site_id = {siteId:UInt16}
+        WHERE site_id = {siteId:UInt32}
           AND session_id = {sessionId:String}
       `,
       query_params: { siteId, sessionId },

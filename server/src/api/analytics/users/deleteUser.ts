@@ -34,7 +34,7 @@ export async function deleteUser(req: FastifyRequest<DeleteUserRequest>, res: Fa
       .where(and(eq(userAliases.siteId, siteId), eq(userAliases.userId, userId)));
     const deviceIds = [userId, ...aliases.map(a => a.anonymousId)];
 
-    const userCondition = `site_id = {siteId:UInt16}
+    const userCondition = `site_id = {siteId:UInt32}
       AND (
         identified_user_id = {userId:String}
         OR (user_id IN ({deviceIds:Array(String)}) AND identified_user_id = '')

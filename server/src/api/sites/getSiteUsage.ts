@@ -72,7 +72,7 @@ export async function getSiteUsage(request: FastifyRequest<GetSiteUsageRequest>,
           site_id,
           COUNT(*) as count
         FROM events
-        WHERE site_id IN {siteIds:Array(UInt16)}
+        WHERE site_id IN {siteIds:Array(UInt32)}
           AND type IN {types:Array(String)}
           AND timestamp >= toDate({periodStart:String})
         GROUP BY site_id

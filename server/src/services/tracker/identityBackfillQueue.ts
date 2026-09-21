@@ -149,7 +149,7 @@ class IdentityBackfillQueue {
               {userIds: Array(String)},
               identified_user_id
             )
-            WHERE site_id IN {siteIds: Array(UInt16)}
+            WHERE site_id IN {siteIds: Array(UInt32)}
               AND concat(toString(site_id), ':', user_id) IN {keys: Array(String)}
               AND identified_user_id = ''${
                 days !== null ? `\n              AND ${timeColumn} >= now() - INTERVAL {days: UInt16} DAY` : ""

@@ -112,7 +112,15 @@ export const sites = pgTable(
     // privateLinkKey until it is claimed; the cleanup cron deletes it after this.
     claimExpiresAt: timestamp("claim_expires_at", { mode: "string" }),
   },
-  table => [check("sites_type_check", sql`${table.type} IS NULL OR ${table.type} IN ('web', 'mobile')`)]
+  table => [
+    check("sites_type_check", sql`${table.type} IS NULL OR ${table.type} IN ('web', 'mobile')`),
+    // The public id is what a tracking snippet and the report routes carry, and
+    // it is six random bytes. Nothing made it unique, so a collision was only
+    // improbable, not impossible - and it grows with the square of the site
+    // count. The lookup takes the first row it finds, so two sites sharing an
+    // id would quietly file one customer's events against the other's reports.
+    unique("sites_id_unique").on(table.id),
+  ]
 );
 
 // Active sessions table.

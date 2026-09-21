@@ -6,7 +6,7 @@ export function buildSiteSessionCountsQuery(useLiteDashboard: boolean) {
         uniqMerge(sessions) AS total_sessions
       FROM overview_hourly_mv_target
       WHERE event_hour >= now() - INTERVAL 1 DAY
-        AND site_id IN {siteIds:Array(UInt16)}
+        AND site_id IN {siteIds:Array(UInt32)}
       GROUP BY site_id
     `;
   }
@@ -17,7 +17,7 @@ export function buildSiteSessionCountsQuery(useLiteDashboard: boolean) {
       uniqExact(session_id) AS total_sessions
     FROM events
     WHERE timestamp >= now() - INTERVAL 1 DAY
-      AND site_id IN {siteIds:Array(UInt16)}
+      AND site_id IN {siteIds:Array(UInt32)}
     GROUP BY site_id
   `;
 }
