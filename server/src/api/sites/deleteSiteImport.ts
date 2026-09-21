@@ -71,7 +71,7 @@ export async function deleteSiteImport(request: FastifyRequest<DeleteImportReque
 
     try {
       await clickhouse.command({
-        query: "DELETE FROM events WHERE import_id = {importId:UUID} AND site_id = {siteId:UInt16}",
+        query: "DELETE FROM events WHERE import_id = {importId:UUID} AND site_id = {siteId:UInt32}",
         query_params: {
           importId: importId,
           siteId: siteId,

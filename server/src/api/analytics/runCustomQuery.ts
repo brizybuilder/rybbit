@@ -60,7 +60,7 @@ export async function runCustomQuery(
     WITH scoped_events AS (
       SELECT *
       FROM events
-      PREWHERE site_id IN {siteIds:Array(UInt16)}
+      PREWHERE site_id IN {siteIds:Array(UInt32)}
     )
     SELECT *
     FROM (

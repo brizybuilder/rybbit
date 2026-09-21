@@ -7,7 +7,7 @@ export async function initializeCloudTables() {
     `
       CREATE TABLE IF NOT EXISTS hourly_events_by_site_mv_target (
         event_hour DateTime,          -- The specific hour
-        site_id UInt16,
+        site_id UInt32,
         event_count UInt64            -- The count of events for that site in that hour
       )
       ENGINE = SummingMergeTree()     -- Sums 'event_count' for rows with the same sorting key

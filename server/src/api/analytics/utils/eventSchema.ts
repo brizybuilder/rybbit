@@ -2,7 +2,7 @@
 // the schema without dragging in the auth/OpenRouter dependency chain.
 export const EVENT_SCHEMA = `
 scoped_events columns:
-- site_id UInt16: Numeric Rybbit site id. scoped_events is already limited to sites the user can access.
+- site_id UInt32: Numeric Rybbit site id. scoped_events is already limited to sites the user can access.
 - timestamp DateTime: Event ingest time in ClickHouse. Use ClickHouse date functions such as toStartOfDay(timestamp).
 - timestamp_ms DateTime64(3): Millisecond event ingest time. Use for event ordering and entry/exit attribution.
 - session_id String: Anonymous visit/session id. Use countDistinct(session_id) for sessions.

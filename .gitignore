@@ -64,3 +64,9 @@ ds-bundle/
 .design-sync/node_modules
 .design-sync/pkg/node_modules
 .design-sync/pkg/dist/
+
+# Database snapshots taken by ops/migrations/pre-migration-snapshot.sh.
+# They hold real customer data and must never be committed.
+snapshot-*/
+*.native.gz
+*.dump

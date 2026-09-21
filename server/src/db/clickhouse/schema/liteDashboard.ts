@@ -77,7 +77,7 @@ export async function initializeLiteDashboardMVs() {
     "create sessions rollup target table",
     `
       CREATE TABLE IF NOT EXISTS sessions_mv_target (
-        site_id UInt16,
+        site_id UInt32,
         session_id String,
         user_id String,
         start_time SimpleAggregateFunction(min, DateTime),
@@ -128,7 +128,7 @@ export async function initializeLiteDashboardMVs() {
     "create hourly overview rollup target table",
     `
       CREATE TABLE IF NOT EXISTS overview_hourly_mv_target (
-        site_id UInt16,
+        site_id UInt32,
         event_hour DateTime,
         pageviews SimpleAggregateFunction(sum, UInt64),
         events SimpleAggregateFunction(sum, UInt64),
@@ -164,7 +164,7 @@ export async function initializeLiteDashboardMVs() {
     "create hourly pathname rollup target table",
     `
       CREATE TABLE IF NOT EXISTS pathname_hourly_mv_target (
-        site_id UInt16,
+        site_id UInt32,
         event_hour DateTime,
         pathname String,
         hostname String,
@@ -202,7 +202,7 @@ export async function initializeLiteDashboardMVs() {
     "create hourly country rollup target table",
     `
       CREATE TABLE IF NOT EXISTS country_hourly_mv_target (
-        site_id UInt16,
+        site_id UInt32,
         event_hour DateTime,
         country LowCardinality(FixedString(2)),
         region LowCardinality(String),
@@ -239,7 +239,7 @@ export async function initializeLiteDashboardMVs() {
     "create hourly device type rollup target table",
     `
       CREATE TABLE IF NOT EXISTS device_type_hourly_mv_target (
-        site_id UInt16,
+        site_id UInt32,
         event_hour DateTime,
         device_type LowCardinality(String),
         pageviews SimpleAggregateFunction(sum, UInt64),
@@ -278,7 +278,7 @@ export async function initializeLiteDashboardMVs() {
     "create session hourly rollup target table",
     `
       CREATE TABLE IF NOT EXISTS session_hourly_mv_target (
-        site_id UInt16,
+        site_id UInt32,
         session_hour DateTime,
         sessions UInt64,
         pageviews UInt64,

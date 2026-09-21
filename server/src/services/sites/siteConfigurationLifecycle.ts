@@ -199,6 +199,38 @@ function isUniqueConstraintViolation(error: unknown): boolean {
   );
 }
 
+// Which constraint rejected the insert decides what to do about it: a duplicate
+// domain is the caller's problem and gets a 409, while a duplicate public id is
+// ours - six random bytes happened to repeat - and is retried with fresh ones.
+function isUniqueViolationOn(error: unknown, constraint: string): boolean {
+  if (!isUniqueConstraintViolation(error)) return false;
+
+  const named =
+    typeof error === "object" && error !== null && "constraint_name" in error
+      ? (error as { constraint_name?: unknown }).constraint_name
+      : undefined;
+
+  return named === constraint || String(error).includes(constraint);
+}
+
+// Six bytes give 2^48 possible ids. Two collisions in a row is already beyond
+// anything a running instance will see, so five attempts is a formality that
+// keeps the failure loud instead of infinite. The whole insert is retried
+// rather than just the id, because create() runs inside a transaction that the
+// rejected insert has already aborted.
+const PUBLIC_ID_ATTEMPTS = 5;
+
+async function retryOnPublicIdCollision<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      if (isUniqueViolationOn(error, "sites_id_unique") && attempt < PUBLIC_ID_ATTEMPTS) continue;
+      throw error;
+    }
+  }
+}
+
 class SiteConfigurationLifecycle {
   private async findSite(siteId: number): Promise<SiteRow> {
     validateSiteId(siteId);
@@ -221,87 +253,92 @@ class SiteConfigurationLifecycle {
     validateSiteIdentity(siteType, domain);
     validateMobileFeatures(siteType, input);
 
-    const createdSite = await withOrganizationSiteLock(input.organizationId, async tx => {
-      if (IS_CLOUD) {
-        const subscription = await getSubscriptionInner(input.organizationId);
+    const createdSite = await retryOnPublicIdCollision(() =>
+      withOrganizationSiteLock(input.organizationId, async tx => {
+        if (IS_CLOUD) {
+          const subscription = await getSubscriptionInner(input.organizationId);
 
-        if (!subscription) {
-          throw new SiteLifecycleError("organization_not_found", 404, "Organization not found");
-        }
+          if (!subscription) {
+            throw new SiteLifecycleError("organization_not_found", 404, "Organization not found");
+          }
 
-        if (input.sessionReplay && !subscription.includesReplay) {
-          throw new SiteLifecycleError("replay_not_entitled", 403, "Session replay requires a Pro subscription");
-        }
+          if (input.sessionReplay && !subscription.includesReplay) {
+            throw new SiteLifecycleError("replay_not_entitled", 403, "Session replay requires a Pro subscription");
+          }
 
-        const requestedStandardFeatures = STANDARD_FEATURES.filter(feature => input[feature]);
-        const hasActiveSubscription = subscription.status === "active" || subscription.status === "trialing";
-        if (requestedStandardFeatures.length > 0 && !hasActiveSubscription) {
-          throw new SiteLifecycleError(
-            "standard_features_not_entitled",
-            403,
-            `The following features require an active subscription: ${requestedStandardFeatures.join(", ")}`
-          );
-        }
-
-        const siteLimit = subscription.siteLimit ?? null;
-        if (siteLimit !== null) {
-          const existingSites = await tx
-            .select({ siteId: sites.siteId })
-            .from(sites)
-            .where(eq(sites.organizationId, input.organizationId));
-
-          if (existingSites.length >= siteLimit) {
+          const requestedStandardFeatures = STANDARD_FEATURES.filter(feature => input[feature]);
+          const hasActiveSubscription = subscription.status === "active" || subscription.status === "trialing";
+          if (requestedStandardFeatures.length > 0 && !hasActiveSubscription) {
             throw new SiteLifecycleError(
-              "site_limit_reached",
+              "standard_features_not_entitled",
               403,
-              `You have reached the limit of ${siteLimit} website${siteLimit === 1 ? "" : "s"} for your plan. Please upgrade to add more.`
+              `The following features require an active subscription: ${requestedStandardFeatures.join(", ")}`
             );
           }
-        }
-      }
 
-      try {
-        const [createdSite] = await tx
-          .insert(sites)
-          .values({
-            id: randomBytes(6).toString("hex"),
-            type: siteType === "web" ? null : siteType,
-            domain,
-            name: input.name,
-            createdBy: input.createdBy,
-            organizationId: input.organizationId,
-            public: input.public ?? false,
-            saltUserIds: input.saltUserIds ?? false,
-            blockBots: input.blockBots ?? true,
-            ...(input.excludedIPs !== undefined && { excludedIPs: input.excludedIPs }),
-            ...(input.excludedCountries !== undefined && { excludedCountries: input.excludedCountries }),
-            ...(input.sessionReplay !== undefined && { sessionReplay: input.sessionReplay }),
-            ...(input.webVitals !== undefined && { webVitals: input.webVitals }),
-            ...(input.trackErrors !== undefined && { trackErrors: input.trackErrors }),
-            ...(input.trackOutbound !== undefined && { trackOutbound: input.trackOutbound }),
-            ...(input.trackUrlParams !== undefined && { trackUrlParams: input.trackUrlParams }),
-            ...(input.trackInitialPageView !== undefined && { trackInitialPageView: input.trackInitialPageView }),
-            ...(input.trackSpaNavigation !== undefined && { trackSpaNavigation: input.trackSpaNavigation }),
-            ...(input.trackIp !== undefined && { trackIp: input.trackIp }),
-            ...(input.trackButtonClicks !== undefined && { trackButtonClicks: input.trackButtonClicks }),
-            ...(input.trackCopy !== undefined && { trackCopy: input.trackCopy }),
-            ...(input.trackFormInteractions !== undefined && { trackFormInteractions: input.trackFormInteractions }),
-            ...(input.tags !== undefined && { tags: input.tags }),
-          })
-          .returning();
+          const siteLimit = subscription.siteLimit ?? null;
+          if (siteLimit !== null) {
+            const existingSites = await tx
+              .select({ siteId: sites.siteId })
+              .from(sites)
+              .where(eq(sites.organizationId, input.organizationId));
 
-        if (!createdSite) {
-          throw new Error("Site insert returned no row");
+            if (existingSites.length >= siteLimit) {
+              throw new SiteLifecycleError(
+                "site_limit_reached",
+                403,
+                `You have reached the limit of ${siteLimit} website${siteLimit === 1 ? "" : "s"} for your plan. Please upgrade to add more.`
+              );
+            }
+          }
         }
 
-        return createdSite;
-      } catch (error) {
-        if (isUniqueConstraintViolation(error)) {
-          throw new SiteLifecycleError("domain_conflict", 409, "Domain already in use");
+        try {
+          const [createdSite] = await tx
+            .insert(sites)
+            .values({
+              id: randomBytes(6).toString("hex"),
+              type: siteType === "web" ? null : siteType,
+              domain,
+              name: input.name,
+              createdBy: input.createdBy,
+              organizationId: input.organizationId,
+              public: input.public ?? false,
+              saltUserIds: input.saltUserIds ?? false,
+              blockBots: input.blockBots ?? true,
+              ...(input.excludedIPs !== undefined && { excludedIPs: input.excludedIPs }),
+              ...(input.excludedCountries !== undefined && { excludedCountries: input.excludedCountries }),
+              ...(input.sessionReplay !== undefined && { sessionReplay: input.sessionReplay }),
+              ...(input.webVitals !== undefined && { webVitals: input.webVitals }),
+              ...(input.trackErrors !== undefined && { trackErrors: input.trackErrors }),
+              ...(input.trackOutbound !== undefined && { trackOutbound: input.trackOutbound }),
+              ...(input.trackUrlParams !== undefined && { trackUrlParams: input.trackUrlParams }),
+              ...(input.trackInitialPageView !== undefined && { trackInitialPageView: input.trackInitialPageView }),
+              ...(input.trackSpaNavigation !== undefined && { trackSpaNavigation: input.trackSpaNavigation }),
+              ...(input.trackIp !== undefined && { trackIp: input.trackIp }),
+              ...(input.trackButtonClicks !== undefined && { trackButtonClicks: input.trackButtonClicks }),
+              ...(input.trackCopy !== undefined && { trackCopy: input.trackCopy }),
+              ...(input.trackFormInteractions !== undefined && { trackFormInteractions: input.trackFormInteractions }),
+              ...(input.tags !== undefined && { tags: input.tags }),
+            })
+            .returning();
+
+          if (!createdSite) {
+            throw new Error("Site insert returned no row");
+          }
+
+          return createdSite;
+        } catch (error) {
+          if (isUniqueViolationOn(error, "sites_id_unique")) {
+            throw error;
+          }
+          if (isUniqueConstraintViolation(error)) {
+            throw new SiteLifecycleError("domain_conflict", 409, "Domain already in use");
+          }
+          throw error;
         }
-        throw error;
-      }
-    });
+      })
+    );
     if (siteType === "web") this.detectSitePlatform(createdSite);
     return createdSite;
   }
@@ -318,19 +355,21 @@ class SiteConfigurationLifecycle {
 
     validateSiteIdentity("web", domain);
 
-    const [createdSite] = await db
-      .insert(sites)
-      .values({
-        id: randomBytes(6).toString("hex"),
-        type: null,
-        domain,
-        name: domain,
-        createdBy: null,
-        organizationId: null,
-        privateLinkKey: randomBytes(6).toString("hex"),
-        claimExpiresAt: new Date(Date.now() + UNCLAIMED_SITE_TTL_MS).toISOString(),
-      })
-      .returning();
+    const [createdSite] = await retryOnPublicIdCollision(() =>
+      db
+        .insert(sites)
+        .values({
+          id: randomBytes(6).toString("hex"),
+          type: null,
+          domain,
+          name: domain,
+          createdBy: null,
+          organizationId: null,
+          privateLinkKey: randomBytes(6).toString("hex"),
+          claimExpiresAt: new Date(Date.now() + UNCLAIMED_SITE_TTL_MS).toISOString(),
+        })
+        .returning()
+    );
 
     if (!createdSite) {
       throw new Error("Site insert returned no row");
@@ -524,29 +563,70 @@ class SiteConfigurationLifecycle {
         .for("update");
       if (!site) return false;
 
-      await this.deleteReplayData(siteId);
+      await this.deleteSiteData(siteId);
       await tx.delete(sites).where(eq(sites.siteId, siteId));
       siteConfig.invalidate(site);
       return true;
     });
   }
 
-  private async deleteReplayData(siteId: number): Promise<void> {
-    await Promise.all([
-      clickhouse.command({
-        query: "DELETE FROM session_replay_events WHERE site_id = {id:UInt32}",
-        query_params: { id: siteId },
-      }),
-      clickhouse.command({
-        query: "DELETE FROM session_replay_metadata_v2 WHERE site_id = {id:UInt32}",
-        query_params: { id: siteId },
-      }),
-    ]);
+  /**
+   * Remove every row this site owns in ClickHouse.
+   *
+   * Clearing only the replay tables used to leave the site's pageviews, bot
+   * events and observations behind for good. Postgres hands out site ids from a
+   * serial and never reuses one, so those rows were merely dead weight - but
+   * only until someone reuses an id by hand or resets the sequence, at which
+   * point the new site inherits a stranger's history and shows it as its own.
+   *
+   * The table list is read from ClickHouse rather than hardcoded, so a table
+   * added upstream is covered the day it appears instead of being remembered
+   * about later.
+   */
+  private async deleteSiteData(siteId: number): Promise<void> {
+    const result = await clickhouse.query({
+      query: `
+        SELECT name AS table
+        FROM system.tables
+        WHERE database = currentDatabase()
+          -- Only the MergeTree family accepts a lightweight DELETE. system.columns
+          -- also lists the materialized views that read these tables, and deleting
+          -- from one of those fails the whole cleanup - leaving the site row in
+          -- Postgres while part of its history is already gone.
+          AND engine LIKE '%MergeTree'
+          -- A migration may have parked the pre-change table alongside the live
+          -- one as a rollback target. Clearing a site out of it would quietly
+          -- destroy what makes the rollback worth having.
+          AND name NOT LIKE '%__pre_uint32'
+          AND name NOT LIKE '%__u32'
+          AND name IN (
+            SELECT table FROM system.columns
+            WHERE database = currentDatabase() AND name = 'site_id'
+          )
+        ORDER BY name
+      `,
+      format: "JSONEachRow",
+    });
+
+    const tables = (await result.json<{ table: string }>())
+      .map(row => row.table)
+      // Belt and braces: the filter above lives in SQL, so a future edit to the
+      // query cannot silently reintroduce a rollback copy here.
+      .filter(table => !/__(pre_uint32|u32)$/.test(table));
+
+    await Promise.all(
+      tables.map(table =>
+        clickhouse.command({
+          query: `DELETE FROM ${table} WHERE site_id = {id:UInt32}`,
+          query_params: { id: siteId },
+        })
+      )
+    );
   }
 
   async delete(siteId: number): Promise<void> {
     const site = await this.findSite(siteId);
-    await this.deleteReplayData(siteId);
+    await this.deleteSiteData(siteId);
     await db.delete(sites).where(eq(sites.siteId, siteId));
     siteConfig.invalidate(site);
   }
