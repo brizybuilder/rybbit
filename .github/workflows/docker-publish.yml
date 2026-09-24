@@ -63,6 +63,13 @@ jobs:
           file: ./client/Dockerfile
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The dashboard bakes the backend URL into its JavaScript at build
+          # time, so a client image serves exactly one domain. Set the
+          # repository variable CLIENT_BASE_URL (Settings -> Variables) to
+          # https://<domain>; without it the image only works on localhost.
+          build-args: |
+            NEXT_PUBLIC_BACKEND_URL=${{ vars.CLIENT_BASE_URL }}
+            NEXT_PUBLIC_DISABLE_SIGNUP=true
           outputs: type=image,"name=ghcr.io/${{ env.REPO_OWNER }}/rybbit-client",push-by-digest=true,name-canonical=true
           push: "${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}"
       - name: Export digests
