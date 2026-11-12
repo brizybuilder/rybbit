@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify";
-import { invalidateSitesAccessCache } from "../../lib/auth-utils.js";
+import { invalidateOrganizationSitesCache, invalidateSitesAccessCache } from "../../lib/auth-utils.js";
 import {
   type CreateSiteInput,
   SiteLifecycleError,
@@ -25,6 +25,9 @@ export async function addSite(
     if (request.user?.id) {
       invalidateSitesAccessCache(request.user.id);
     }
+    // The organization's cached site list (what an organization key is checked
+    // against) predates this site in the worker that served the request.
+    invalidateOrganizationSitesCache(request.params.organizationId);
 
     return reply.status(201).send(newSite);
   } catch (error) {

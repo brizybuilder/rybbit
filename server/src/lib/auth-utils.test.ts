@@ -54,6 +54,7 @@ import {
   getRequestIdentity,
   getUserIdFromRequest,
   invalidateSitesAccessCache,
+  invalidateOrganizationSitesCache,
 } from "./auth-utils.js";
 import {
   filterSitesByMemberAccess,
@@ -703,4 +704,19 @@ it("refreshes cached session access after another worker claims a site", async (
   });
   expect(await getUserHasAccessToSite(reqFor("user_owner"), 99)).toBe(true);
   expect(await getUserHasAdminAccessToSite(reqFor("user_owner"), 99)).toBe(true);
+});
+
+it("refreshes cached organization-key access after another worker adds a site", async () => {
+  const req = { headers: {}, query: {}, apiKeyOrganizationId: ORG } as any;
+  invalidateOrganizationSitesCache(ORG);
+  await getSitesUserHasAccessTo(req);
+  await db.insert(sites).values({
+    id: "orgnewhex",
+    siteId: 98,
+    name: "Just created",
+    domain: "just-created.dev",
+    organizationId: ORG,
+  });
+  expect(await getUserHasAccessToSite(req, 98)).toBe(true);
+  expect(await getUserHasAdminAccessToSite(req, 98)).toBe(true);
 });

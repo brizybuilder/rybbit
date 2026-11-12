@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   getSubscriptionInner: vi.fn(),
   invalidateSitesAccessCache: vi.fn(),
+  invalidateOrganizationSitesCache: vi.fn(),
 }));
 
 vi.mock("../../db/postgres/postgres.js", () => ({
@@ -50,6 +51,7 @@ vi.mock("../stripe/getSubscription.js", () => ({
 
 vi.mock("../../lib/auth-utils.js", () => ({
   invalidateSitesAccessCache: mocks.invalidateSitesAccessCache,
+  invalidateOrganizationSitesCache: mocks.invalidateOrganizationSitesCache,
 }));
 
 import { addSite } from "./addSite.js";
@@ -99,6 +101,16 @@ describe("addSite — access cache invalidation", () => {
     expect(reply.statusCode).toBe(201);
     expect(mocks.invalidateSitesAccessCache).toHaveBeenCalledOnce();
     expect(mocks.invalidateSitesAccessCache).toHaveBeenCalledWith("u_1");
+  });
+
+  it("drops the organization's cached site list, which an organization key is checked against", async () => {
+    const reply = replyStub();
+
+    await addSite(makeRequest({}), reply);
+
+    expect(reply.statusCode).toBe(201);
+    expect(mocks.invalidateOrganizationSitesCache).toHaveBeenCalledOnce();
+    expect(mocks.invalidateOrganizationSitesCache).toHaveBeenCalledWith("org_1");
   });
 });
 

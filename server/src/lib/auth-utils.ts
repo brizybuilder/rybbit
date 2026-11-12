@@ -292,6 +292,10 @@ export function invalidateSitesAccessCache(userId: string) {
   sitesAccessCache.del(`${userId}:false`);
 }
 
+export function invalidateOrganizationSitesCache(organizationId: string) {
+  sitesAccessCache.del(`org:${organizationId}`);
+}
+
 /**
  * Resolve the organization a request is targeting: an explicit organization
  * param, or the organization owning the site param.
@@ -503,9 +507,21 @@ async function hasSiteAccess(req: FastifyRequest, siteId: string | number, admin
   // A claim may have committed in another worker while this one still holds
   // the user's pre-claim site list. Never let a cached miss deny a new grant.
   const userId = req.user?.id ?? (await getSessionFromReq(req))?.user.id;
-  if (!userId) return false;
-  invalidateSitesAccessCache(userId);
-  return matches(await getSitesUserHasAccessTo(req, adminOnly));
+  if (userId) {
+    invalidateSitesAccessCache(userId);
+    return matches(await getSitesUserHasAccessTo(req, adminOnly));
+  }
+
+  // Same for an organization key: a site this organization created a moment
+  // ago - possibly through another worker - is missing from the list this
+  // worker cached up to 15 s earlier, and the key's very next call about that
+  // site (a goal, its tracking config) would be refused.
+  if (req.apiKeyOrganizationId) {
+    invalidateOrganizationSitesCache(req.apiKeyOrganizationId);
+    return matches(await getSitesUserHasAccessTo(req, adminOnly));
+  }
+
+  return false;
 }
 
 export async function getUserHasAccessToSite(req: FastifyRequest, siteId: string | number) {
